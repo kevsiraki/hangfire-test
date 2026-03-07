@@ -1,0 +1,19 @@
+﻿@page "/"
+@using Hangfire
+@inject IBackgroundJobClient BackgroundJobClient
+@inject HangfireBlazorDemo.Jobs.MyBackgroundJob Job
+@rendermode InteractiveServer
+<PageTitle>Home</PageTitle>
+
+<h3>Hangfire Job Demo</h3>
+
+<button class="btn btn-primary" @onclick="StartJob">
+    Start Job
+</button>
+
+@code {
+    void StartJob()
+    {
+        BackgroundJobClient.Enqueue<HangfireBlazorDemo.Jobs.MyBackgroundJob>(x => x.RunJob());
+    }
+}
