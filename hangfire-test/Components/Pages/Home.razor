@@ -1,15 +1,13 @@
 ﻿@page "/"
 @using Hangfire
-@using Hangfire.Storage
-@using Hangfire.Storage.Monitoring
 @inject IBackgroundJobClient BackgroundJobClient
 @rendermode InteractiveServer
-
-<PageTitle>Home</PageTitle>
+@inject NavigationManager Navigation
+@using Microsoft.AspNetCore.SignalR.Client
 
 <h3>Hangfire Job Demo</h3>
 
-<button class="btn btn-primary" @onclick="StartJob">
+<button class="btn btn-primary" @onclick="StartJob" disabled="@isRunning">
     Start Job
 </button>
 
@@ -17,53 +15,45 @@
 {
     <div class="progress mt-3" style="height:25px;">
         <div class="progress-bar progress-bar-striped progress-bar-animated"
-             role="progressbar"
              style="width:@progress%">
             @progress%
+            
         </div>
     </div>
-
-    <p class="mt-2">@status</p>
+    <br />
+    @status
 }
 
 @code {
 
-    string jobId;
-    bool isRunning = false;
     int progress = 0;
-    string status = "";
+    bool isRunning = false;
+    string status = "Starting job...";
 
-    System.Threading.Timer timer;
+    HubConnection hubConnection;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/progresshub"))
+            .Build();
+
+        hubConnection.On<int, string>("ReceiveProgress", (percent, message) =>
+        {
+            progress = percent;
+            status = message;
+            InvokeAsync(StateHasChanged);
+        });
+
+        await hubConnection.StartAsync();
+    }
 
     void StartJob()
     {
-        jobId = BackgroundJobClient.Enqueue<HangfireBlazorDemo.Jobs.MyBackgroundJob>(x => x.RunJob());
-
+        progress = 0;
         isRunning = true;
-        progress = 10;
-        status = "Job Started";
 
-        timer = new Timer(CheckJobStatus, null, 0, 2000);
+        BackgroundJobClient.Enqueue<HangfireBlazorDemo.Jobs.MyBackgroundJob>(x => x.RunJob(null));
     }
 
-    void CheckJobStatus(object state)
-    {
-        var api = JobStorage.Current.GetMonitoringApi();
-        var job = api.JobDetails(jobId);
-
-        if (job != null && job.History.First().StateName == "Succeeded")
-        {
-            progress = 100;
-            status = "Job Completed";
-            isRunning = false;
-            timer.Dispose();
-        }
-        else
-        {
-            progress = Math.Min(progress + 10, 90);
-            status = "Processing...";
-        }
-
-        InvokeAsync(StateHasChanged);
-    }
 }
