@@ -1,8 +1,10 @@
 ﻿@page "/"
 @using Hangfire
+@using Hangfire.Storage
+@using Hangfire.Storage.Monitoring
 @inject IBackgroundJobClient BackgroundJobClient
-@inject HangfireBlazorDemo.Jobs.MyBackgroundJob Job
 @rendermode InteractiveServer
+
 <PageTitle>Home</PageTitle>
 
 <h3>Hangfire Job Demo</h3>
@@ -11,9 +13,57 @@
     Start Job
 </button>
 
+@if (isRunning)
+{
+    <div class="progress mt-3" style="height:25px;">
+        <div class="progress-bar progress-bar-striped progress-bar-animated"
+             role="progressbar"
+             style="width:@progress%">
+            @progress%
+        </div>
+    </div>
+
+    <p class="mt-2">@status</p>
+}
+
 @code {
+
+    string jobId;
+    bool isRunning = false;
+    int progress = 0;
+    string status = "";
+
+    System.Threading.Timer timer;
+
     void StartJob()
     {
-        BackgroundJobClient.Enqueue<HangfireBlazorDemo.Jobs.MyBackgroundJob>(x => x.RunJob());
+        jobId = BackgroundJobClient.Enqueue<HangfireBlazorDemo.Jobs.MyBackgroundJob>(x => x.RunJob());
+
+        isRunning = true;
+        progress = 10;
+        status = "Job Started";
+
+        timer = new Timer(CheckJobStatus, null, 0, 2000);
+    }
+
+    void CheckJobStatus(object state)
+    {
+        var api = JobStorage.Current.GetMonitoringApi();
+        var job = api.JobDetails(jobId);
+
+        if (job != null && job.History.First().StateName == "Succeeded")
+        {
+            progress = 100;
+            status = "Job Completed";
+            isRunning = false;
+            timer.Dispose();
+        }
+        else
+        {
+            progress = Math.Min(progress + 10, 90);
+            status = "Processing...";
+        }
+
+        InvokeAsync(StateHasChanged);
     }
 }
